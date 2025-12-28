@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px; color: #333;
+        }
+        .main-container { display: flex; gap: 20px; max-width: 1600px; margin: 0 auto; height: 92vh; }
+        
+        .control-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px; padding: 20px; width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column;
+        }
+        .video-list { overflow-y: auto; flex-grow: 1; margin-top: 15px; padding-right: 5px; }
+
+        .video-item {
+            background: white; border-radius: 12px; padding: 15px;
+            margin-bottom: 15px; border: 2px solid transparent;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: 0.3s;
+        }
+        .video-item.active { border-color: #f5576c; background: #fff8f9; }
+        .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        
+        .pause-list { 
+            display: flex; flex-direction: column; gap: 4px; margin-top: 8px;
+            border-top: 1px solid #eee; padding-top: 8px;
+        }
+        .pause-row {
+            background: #f8f9fa; padding: 8px 12px; border-radius: 6px;
+            font-size: 12px; cursor: pointer; border-left: 3px solid #667eea; 
+            transition: 0.2s; display: flex; justify-content: space-between; align-items: center;
+        }
+        .pause-row:hover { background: #ffeef0; border-left-color: #f5576c; transform: translateX(5px); }
+        .pause-row strong { color: #f5576c; margin-right: 5px; }
+
+        .preview-zone {
+            flex: 1; background: #000; border-radius: 20px;
+            display: flex; flex-direction: column; overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+        .video-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; }
+        #mainPlayer { width: 100%; max-height: 100%; }
+
+        .modal {
+            display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 20px;
+            width: 1000px; max-height: 90vh; display: flex; gap: 20px;
+        }
+        .modal-left { flex: 1.5; }
+        .modal-right { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+
+        .btn { padding: 8px 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
+        .btn-add { background: #4caf50; color: white; width: 100%; }
+        .btn-save { background: #667eea; color: white; }
+        .btn-ghim { background: #f5576c; color: white; }
+        input[type="number"], input[type="text"] { padding: 6px; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="control-panel">
+            <h2 style="margin-bottom: 10px;">🎬 Media Playlist Pro</h2>
+            <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button class="btn btn-save" style="flex:1" onclick="exportData()">💾 Xuất JSON (Đóng gói Video)</button>
+                <button class="btn" style="flex:1; background:#ff9800; color:white;" onclick="document.getElementById('importFile').click()">📥 Nhập JSON</button>
+                <input type="file" id="importFile" hidden accept=".json" onchange="importData(event)">
+            </div>
+
+            <button class="btn btn-add" onclick="openModal()">+ Thêm Nhiều Media</button>
+            <div class="video-list" id="videoList"></div>
+            <button class="btn btn-save" id="btnMutilScreen" style="background: #333; margin-top: 15px;">🖥️ Màn Hình 2 (Mở cửa sổ)</button>
+        </div>
+
+        <div class="preview-zone">
+            <div class="video-wrapper" id="previewContainer">
+                <p style="color: #666;">Chọn media từ danh sách hoặc nhập file JSON</p>
+            </div>
+            <div id="playingInfo" style="padding: 10px 20px; background: rgba(255,255,255,0.1); color: white; font-size: 13px; display: none;">
+                Đang phát: <span id="currentTitle"></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-left">
+                <h3>Thiết lập Media</h3>
+                <div id="modalPlayerContainer" style="background:#000; height: 350px; margin: 15px 0; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></div>
+                <div style="background: #f9f9f9; padding: 15px; border-radius: 10px;">
+                    <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                        <div><label>Bắt đầu (s):</label><br><input type="number" id="editStart" value="0" style="width:80px"></div>
+                        <div><label>Kết thúc (s):</label><br><input type="number" id="editEnd" value="0" style="width:80px"></div>
+                        <div style="flex: 1; text-align: right;"><br><button class="btn btn-ghim" onclick="ghimPausePoint()">📍 Ghim Điểm Dừng</button></div>
+                    </div>
+                    <button id="btnPickFile" class="btn" style="background:#2196f3; color:white; width: 100%;" onclick="document.getElementById('multiFilePicker').click()">📁 Chọn File Video/Audio</button>
+                    <input type="file" id="multiFilePicker" hidden multiple accept="video/*,audio/*" onchange="handleMultiSelect(event)">
+                </div>
+            </div>
+            <div class="modal-right">
+                <label>Tên hiển thị:</label><input type="text" id="editName" style="margin-bottom: 15px;">
+                <label>Các điểm dừng:</label>
+                <div id="pausePointsEditor" style="flex-grow: 1; margin: 10px 0; border-top: 1px solid #eee; padding-top: 10px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn" style="background:#eee; flex:1;" onclick="closeModal()">Hủy</button>
+                    <button id="btnSaveMedia" class="btn btn-save" style="flex:1;" onclick="saveMedia()">Lưu vào Playlist</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DB chỉ lưu metadata trong localStorage để tránh bị tràn bộ nhớ (LocalStorage giới hạn ~5MB)
+        // Dữ liệu video thật (Base64) sẽ chỉ tồn tại trong biến 'db' khi app đang chạy hoặc trong file JSON
+        let db = [];
+        let currentIndex = -1;
+        let editingIndex = -1;
+        let tempFilesData = []; 
+        let fullscreenWindow = null;
+        let globalLastPause = -1; 
+
+        // Tải danh sách từ LocalStorage (không chứa base64 để tránh lỗi trình duyệt)
+        const savedMeta = localStorage.getItem('media_meta_v5');
+        if (savedMeta) db = JSON.parse(savedMeta);
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        function renderVideoList() {
+            const list = document.getElementById('videoList');
+            list.innerHTML = db.map((item, idx) => `
+                <div class="video-item ${currentIndex === idx ? 'active' : ''}">
+                    <div class="item-header">
+                        <div style="cursor:pointer; flex:1" onclick="playMedia(${idx})">
+                            <strong>${idx + 1}. ${item.name}</strong><br>
+                            <small style="color:${item.base64Data ? '#4caf50' : '#f44336'}">
+                                ${item.base64Data ? '● Sẵn sàng' : '○ Thiếu dữ liệu (Hãy Nhập JSON)'}
+                            </small>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn" style="background:#eee; font-size:11px;" onclick="openModal(${idx})">⚙️</button>
+                            <button class="btn" style="background:#ff4444; color:white; font-size:11px;" onclick="deleteMedia(${idx})">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="pause-list">
+                        ${item.pausePoints.map(p => `
+                            <div class="pause-row" onclick="jumpTo(${idx}, ${p.time})">
+                                <span><strong>${p.time}s:</strong> ${p.hint}</span>
+                                <span style="color:#667eea; font-size:10px;">▶ Phát</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function playMedia(idx) {
+            const item = db[idx];
+            if (!item.base64Data) return alert("Không tìm thấy dữ liệu video trong bộ nhớ. Vui lòng Nhập lại file JSON!");
+            
+            currentIndex = idx;
+            globalLastPause = -1;
+            const container = document.getElementById('previewContainer');
+            
+            container.innerHTML = `<video id="mainPlayer" controls><source src="${item.base64Data}"></video>`;
+            const player = document.getElementById('mainPlayer');
+            
+            document.getElementById('playingInfo').style.display = 'block';
+            document.getElementById('currentTitle').innerText = item.name;
+            
+            player.currentTime = item.startTime;
+            player.play();
+            
+            player.ontimeupdate = () => {
+                const now = Math.floor(player.currentTime);
+                if (now >= item.endTime) { player.pause(); player.currentTime = item.startTime; }
+                const point = item.pausePoints.find(p => p.time === now && globalLastPause !== now);
+                if (point) { player.pause(); globalLastPause = now; }
+            };
+
+            if (fullscreenWindow && !fullscreenWindow.closed) {
+                fullscreenWindow.postMessage({ action: 'load', src: item.base64Data, start: item.startTime }, '*');
+            }
+            renderVideoList();
+        }
+
+        function jumpTo(idx, time) {
+            if (currentIndex !== idx) playMedia(idx);
+            setTimeout(() => {
+                const p = document.getElementById('mainPlayer');
+                if (p) {
+                    p.currentTime = time;
+                    globalLastPause = time;
+                    p.play();
+                    if (fullscreenWindow && !fullscreenWindow.closed) {
+                        fullscreenWindow.postMessage({ action: 'jump', time: time }, '*');
+                    }
+                }
+            }, 500);
+        }
+
+        async function handleMultiSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+
+            const btnSave = document.getElementById('btnSaveMedia');
+            const btnPick = document.getElementById('btnPickFile');
+            
+            btnSave.disabled = true;
+            btnPick.innerText = "⌛ Đang mã hóa Video (Base64)...";
+
+            tempFilesData = [];
+            for (let file of files) {
+                const b64 = await fileToBase64(file);
+                tempFilesData.push({
+                    name: file.name.split('.')[0],
+                    fileName: file.name,
+                    base64Data: b64
+                });
+            }
+
+            setupModalPlayer(tempFilesData[0].base64Data);
+            document.getElementById('editName').value = tempFilesData[0].name;
+            
+            btnSave.disabled = false;
+            btnPick.innerText = "📁 Chọn File";
+        }
+
+        function openModal(idx = -1) {
+            editingIndex = idx;
+            tempFilesData = [];
+            document.getElementById('editModal').style.display = 'flex';
+            document.getElementById('pausePointsEditor').innerHTML = '';
+            
+            if (idx > -1) {
+                const item = db[idx];
+                document.getElementById('editName').value = item.name;
+                document.getElementById('editStart').value = item.startTime;
+                document.getElementById('editEnd').value = item.endTime;
+                item.pausePoints.forEach(p => addPausePointRow(p.time, p.hint));
+                if (item.base64Data) setupModalPlayer(item.base64Data);
+            } else {
+                document.getElementById('editName').value = '';
+                document.getElementById('modalPlayerContainer').innerHTML = '<p style="color:white">Chọn file để thiết lập</p>';
+            }
+        }
+
+        function setupModalPlayer(src) {
+            const container = document.getElementById('modalPlayerContainer');
+            container.innerHTML = `<video id="modalPlayer" controls style="width:100%; max-height:100%"><source src="${src}"></video>`;
+            const p = document.getElementById('modalPlayer');
+            p.onloadedmetadata = () => { if (editingIndex === -1) document.getElementById('editEnd').value = Math.floor(p.duration); };
+        }
+
+        function ghimPausePoint() {
+            const p = document.getElementById('modalPlayer');
+            if (p) addPausePointRow(Math.floor(p.currentTime), "Ghi chú...");
+        }
+
+        function addPausePointRow(time, hint) {
+            const div = document.createElement('div');
+            div.className = 'pause-point-row';
+            div.style = "display:flex; gap:5px; margin-bottom:5px;";
+            div.innerHTML = `<input type="number" value="${time}" style="width:60px"><input type="text" value="${hint}" style="flex:1"><button onclick="this.parentElement.remove()" style="border:none;background:none;cursor:pointer">❌</button>`;
+            document.getElementById('pausePointsEditor').appendChild(div);
+        }
+
+        function saveMedia() {
+            const startTime = parseInt(document.getElementById('editStart').value) || 0;
+            const endTime = parseInt(document.getElementById('editEnd').value) || 9999;
+            const rows = document.querySelectorAll('.pause-point-row');
+            const pausePoints = Array.from(rows).map(r => ({
+                time: parseInt(r.querySelectorAll('input')[0].value),
+                hint: r.querySelectorAll('input')[1].value
+            })).sort((a,b) => a.time - b.time);
+
+            if (editingIndex > -1) {
+                db[editingIndex].name = document.getElementById('editName').value;
+                db[editingIndex].startTime = startTime;
+                db[editingIndex].endTime = endTime;
+                db[editingIndex].pausePoints = pausePoints;
+                if (tempFilesData.length > 0) db[editingIndex].base64Data = tempFilesData[0].base64Data;
+            } else {
+                tempFilesData.forEach(f => {
+                    db.push({ 
+                        name: f.name, 
+                        fileName: f.fileName, 
+                        base64Data: f.base64Data, 
+                        startTime, endTime, 
+                        pausePoints: [...pausePoints] 
+                    });
+                });
+            }
+            
+            // Lưu metadata vào LocalStorage (loại bỏ base64 để không làm treo trình duyệt)
+            const metaOnly = db.map(item => ({...item, base64Data: null}));
+            localStorage.setItem('media_meta_v5', JSON.stringify(metaOnly));
+            
+            renderVideoList();
+            closeModal();
+        }
+
+        function exportData() {
+            if (db.length === 0) return alert("Danh sách trống!");
+            // Xuất toàn bộ DB (bao gồm Base64) ra file JSON
+            const dataString = JSON.stringify(db);
+            const blob = new Blob([dataString], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'media_full_package.json';
+            a.click();
+        }
+
+        function importData(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                try {
+                    db = JSON.parse(ev.target.result); 
+                    // Cập nhật lại meta trong LocalStorage
+                    const metaOnly = db.map(item => ({...item, base64Data: null}));
+                    localStorage.setItem('media_meta_v5', JSON.stringify(metaOnly));
+                    renderVideoList(); 
+                    alert("Đã nhập dữ liệu thành công!");
+                } catch (err) {
+                    alert("File JSON không hợp lệ!");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+        function deleteMedia(idx) { 
+            if(confirm('Xóa media này?')) { 
+                db.splice(idx,1); 
+                const metaOnly = db.map(item => ({...item, base64Data: null}));
+                localStorage.setItem('media_meta_v5', JSON.stringify(metaOnly));
+                renderVideoList(); 
+            } 
+        }
+
+        document.getElementById('btnMutilScreen').onclick = () => {
+            fullscreenWindow = window.open('', 'Screen2', 'width=800,height=600');
+            fullscreenWindow.document.write(`
+                <html><body style="background:#000;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden">
+                <video id="v" style="width:100%;height:100%"></video>
+                <script>
+                    window.onmessage = (e) => {
+                    console.log("data", e.data);
+                        const v = document.getElementById('v');
+                        if(e.data.action === 'load') { v.src = e.data.src; v.currentTime = e.data.start; v.play(); }
+                        if(e.data.action === 'jump') { v.currentTime = e.data.time; v.play(); }
+                    };
+                <\/script></body></html>
+            `);
+        };
+
+        renderVideoList();
+    </script>
+</body>
+</html>
