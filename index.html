@@ -7,64 +7,85 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .video-item.active { border-color: #f5576c; background-color: #fff8f9; }
+        
+        .video-item.active { 
+            border-color: #f5576c; 
+            background-color: #fff8f9;
+            box-shadow: 0 10px 15px -3px rgba(245, 87, 108, 0.1);
+        }
         .pause-row:hover { transform: translateX(5px); }
         video { border-radius: 12px; max-height: 100%; width: 100%; object-fit: contain; background: #000; }
         .modal-open { overflow: hidden !important; }
         
-        /* Animation cho icon khi hover */
-        .btn-icon-hover:hover i { transform: scale(1.1); transition: transform 0.2s; }
+        @keyframes pulse-red {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .is-playing-icon { animation: pulse-red 1.5s infinite; color: #f5576c; }
+        .drag-ghost { opacity: 0.5; background: #f1f5f9; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-[#667eea] to-[#764ba2] min-h-screen p-2 md:p-5 text-gray-800">
+<body class="bg-gradient-to-br from-[#1a2a6c] via-[#b21f1f] to-[#fdbb2d] min-h-screen p-2 md:p-5 text-gray-800">
 
     <div class="max-w-[1600px] mx-auto flex flex-col-reverse lg:flex-row gap-5 h-auto lg:h-[92vh]">
         
-        <div class="w-full lg:w-[450px] bg-white/95 backdrop-blur shadow-2xl rounded-3xl p-5 flex flex-col h-[600px] lg:h-full">
-            <h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
-                <i data-lucide="clapperboard" class="text-[#f5576c]"></i> 
-                <span class="text-gray-800">Media Player</span>
+        <div class="w-full lg:w-[450px] bg-white/95 backdrop-blur shadow-2xl rounded-3xl p-5 flex flex-col h-[650px] lg:h-full transition-all">
+            <h2 class="text-2xl font-bold mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="clapperboard" class="text-[#f5576c]"></i> 
+                    <span>Playlist</span>
+                </div>
+                <span id="itemCount" class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500">0 mục</span>
             </h2>
             
             <div class="grid grid-cols-2 gap-2 mb-4">
-                <button onclick="exportData()" class="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md active:scale-95 text-sm">
-                    <i data-lucide="upload" class="w-4 h-4"></i> Xuất JSON
+                <button id="btnExport" onclick="exportDataZip()" class="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md active:scale-95 text-sm">
+                    <i data-lucide="archive" class="w-4 h-4"></i> Xuất ZIP
                 </button>
-                <button onclick="document.getElementById('importFile').click()" class="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md active:scale-95 text-sm">
-                    <i data-lucide="download" class="w-4 h-4"></i> Nhập JSON
+                <button id="btnImport" onclick="document.getElementById('importFile').click()" class="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md active:scale-95 text-sm">
+                    <i data-lucide="folder-down" class="w-4 h-4"></i> Nhập ZIP
                 </button>
-                <input type="file" id="importFile" hidden accept=".json" onchange="importData(event)">
+                <input type="file" id="importFile" hidden accept=".zip" onchange="importDataZip(event)">
             </div>
 
             <button onclick="openModal()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl mb-4 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
                 <i data-lucide="plus-circle"></i>
-                <span>Thêm Media</span>
+                <span>Thêm Media Mới</span>
             </button>
 
-            <div id="videoList" class="flex-grow overflow-y-auto space-y-3 pr-1">
-                <p class="text-center text-gray-400 mt-10">Trống trơn luôn</p>
-            </div>
+            <div id="videoList" class="flex-grow overflow-y-auto space-y-3 pr-1"></div>
         </div>
 
         <div class="flex-1 bg-black rounded-3xl shadow-2xl overflow-hidden flex flex-col relative min-h-[400px]">
             <div id="previewContainer" class="flex-1 flex items-center justify-center p-2 relative text-center">
-                <div>
-                    <i data-lucide="film" class="w-16 h-16 text-gray-700 mx-auto mb-4"></i>
-                    <p class="text-gray-500 font-medium">Chọn media từ danh sách để bắt đầu</p>
+                <div class="text-white opacity-30">
+                    <i data-lucide="play-circle" class="w-20 h-20 mx-auto mb-4"></i>
+                    <p class="text-xl font-medium">Chọn video từ danh sách để phát</p>
                 </div>
             </div>
 
-            <div id="playingInfo" class="hidden px-5 py-3 bg-white/10 text-white text-sm backdrop-blur-md">
-                <div class="flex items-center gap-2">
-                    <i data-lucide="play" class="w-4 h-4 fill-current"></i>
-                    Đang phát: <span id="currentTitle" class="font-bold text-[#f5576c] ml-1 uppercase"></span>
+            <div id="playingInfo" class="hidden px-6 py-4 bg-white/10 text-white text-sm backdrop-blur-md border-t border-white/10">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0"></div>
+                        <span class="text-gray-400 uppercase tracking-widest text-[10px] font-bold flex-shrink-0">Đang phát</span>
+                        <span id="currentTitle" class="font-bold text-lg truncate"></span>
+                    </div>
+                    <div class="flex items-center gap-4 ml-4">
+                         <div class="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+                            <i data-lucide="repeat" class="w-4 h-4 text-green-400"></i>
+                         </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -72,15 +93,16 @@
 
     <div id="editModal" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-start md:items-center justify-center p-0 md:p-4 backdrop-blur-sm overflow-y-auto">
         <div class="bg-white w-full max-w-5xl min-h-screen md:min-h-0 md:rounded-[2rem] shadow-2xl flex flex-col md:flex-row relative">
-            <button onclick="closeModal()" class="absolute top-4 right-4 z-50 bg-gray-100 hover:bg-red-500 hover:text-white w-7 h-7 rounded-full transition-colors flex items-center justify-center shadow-lg">
+            <button onclick="closeModal()" class="absolute top-4 right-4 z-50 bg-gray-100 hover:bg-red-500 hover:text-white w-8 h-8 rounded-full transition-colors flex items-center justify-center shadow-lg">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
+            
             <div class="flex-1 p-6 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
                 <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
                     <i data-lucide="settings" class="text-gray-400"></i> Thiết lập Media
                 </h3>
-                <div id="modalPlayerContainer" class="bg-black rounded-2xl aspect-video mb-4 flex items-center justify-center overflow-hidden">
-                    <p class="text-gray-400 text-sm">Chưa có video</p>
+                <div id="modalPlayerContainer" class="bg-black rounded-2xl aspect-video mb-4 flex items-center justify-center overflow-hidden shadow-inner">
+                    <p class="text-gray-400 text-sm italic">Vui lòng chọn file để xem trước</p>
                 </div>
                 <div class="bg-gray-50 p-4 rounded-2xl space-y-4">
                     <div class="grid grid-cols-2 gap-4">
@@ -93,26 +115,27 @@
                             <input type="number" id="editEnd" value="0" class="w-full mt-1 border border-gray-200 rounded-lg p-2 outline-none focus:border-blue-400">
                         </div>
                     </div>
-                    <button onclick="ghimPausePointModal()" class="w-full bg-[#f5576c] text-white py-2 rounded-lg font-bold shadow-md hover:opacity-90 flex items-center justify-center gap-2">
-                        <i data-lucide="map-pin" class="w-4 h-4"></i> Ghim Điểm Dừng
+                    <button onclick="ghimPausePointModal()" class="w-full bg-[#f5576c] text-white py-2 rounded-lg font-bold shadow-md hover:opacity-90 flex items-center justify-center gap-2 transition-all">
+                        <i data-lucide="map-pin" class="w-4 h-4"></i> Ghim Điểm Dừng Hiện Tại
                     </button>
-                    <button id="btnPickFile" onclick="document.getElementById('multiFilePicker').click()" class="w-full bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600 flex items-center justify-center gap-2">
-                        <i data-lucide="file-video" class="w-4 h-4"></i> Chọn File Media
+                    <button id="btnPickFile" onclick="document.getElementById('multiFilePicker').click()" class="w-full bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600 flex items-center justify-center gap-2 transition-all">
+                        <i data-lucide="file-video" class="w-4 h-4"></i> Chọn File Media (Video/Audio)
                     </button>
                     <input type="file" id="multiFilePicker" hidden multiple accept="video/*,audio/*" onchange="handleMultiSelect(event)">
                 </div>
             </div>
+
             <div class="w-full md:w-[380px] p-6 flex flex-col">
                 <div class="flex-none">
                     <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Tên hiển thị</label>
-                    <input type="text" id="editName" class="w-full mt-1 mb-4 border border-gray-200 rounded-lg p-2 outline-none focus:border-blue-400">
-                    <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Các điểm dừng</label>
+                    <input type="text" id="editName" class="w-full mt-1 mb-4 border border-gray-200 rounded-lg p-3 outline-none focus:border-blue-400 font-semibold">
+                    <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Các điểm dừng đã ghim</label>
                 </div>
                 <div id="pausePointsEditor" class="flex-grow overflow-y-auto space-y-2 mb-4 p-1 min-h-[200px] max-h-[400px]"></div>
                 <div class="flex-none flex gap-3 mt-auto pt-4 border-t border-gray-100">
                     <button onclick="closeModal()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-300">Hủy</button>
-                    <button id="btnSaveMedia" onclick="saveMedia()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 flex items-center justify-center gap-2">
-                        <i data-lucide="save" class="w-5 h-5"></i> Lưu
+                    <button id="btnSaveMedia" onclick="saveMedia()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 flex items-center justify-center gap-2 transition-all">
+                        <i data-lucide="save" class="w-5 h-5"></i> Lưu Lại
                     </button>
                 </div>
             </div>
@@ -121,21 +144,50 @@
 
     <script>
         const dbAEON = new Dexie("AEON_Pro_Storage");
-        dbAEON.version(1).stores({ media: "++id, name" });
+        dbAEON.version(2).stores({ media: "++id, name, order" });
 
         let db = [];
         let currentIndex = -1, editingIndex = -1, tempFilesData = []; 
-        let fullscreenWindow = null, globalLastPause = -1, currentObjectURL = null;
+        let globalLastPause = -1, currentObjectURL = null;
+
+        window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            const player = document.getElementById('mainPlayer');
+            if (!player) return;
+
+            switch(e.code) {
+                case 'Space': 
+                    e.preventDefault();
+                    player.paused ? player.play() : player.pause();
+                    break;
+                case 'KeyF':
+                    if (player.requestFullscreen) player.requestFullscreen();
+                    break;
+                case 'KeyM':
+                    player.muted = !player.muted;
+                    break;
+            }
+        });
 
         async function loadDataFromDB() {
-            db = await dbAEON.media.toArray();
+            db = await dbAEON.media.orderBy('order').toArray();
+            if (db.length > 0 && db[0].order === undefined) {
+                for (let i = 0; i < db.length; i++) {
+                    await dbAEON.media.update(db[i].id, { order: i });
+                }
+                db = await dbAEON.media.orderBy('order').toArray();
+            }
+            document.getElementById('itemCount').innerText = `${db.length} mục`;
             renderVideoList();
-            lucide.createIcons(); // Khởi tạo icon sau khi load data
         }
 
         function renderVideoList() {
             const list = document.getElementById('videoList');
-            if (db.length === 0) { list.innerHTML = '<div class="flex flex-col items-center mt-10 text-gray-400"><i data-lucide="inbox" class="w-10 h-10 mb-2"></i><p>Danh sách trống</p></div>'; lucide.createIcons(); return; }
+            if (db.length === 0) { 
+                list.innerHTML = '<div class="flex flex-col items-center mt-20 text-gray-400"><i data-lucide="inbox" class="w-12 h-12 mb-3 opacity-20"></i><p>Chưa có video nào</p></div>'; 
+                lucide.createIcons(); 
+                return; 
+            }
             
             const mainPlayer = document.getElementById('mainPlayer');
 
@@ -144,24 +196,24 @@
                 const isPlaying = isActive && mainPlayer && !mainPlayer.paused;
 
                 return `
-                    <div class="video-item group p-4 rounded-2xl bg-white border-2 border-transparent shadow-sm hover:shadow-md transition-all ${isActive ? 'active shadow-rose-100' : ''}">
+                    <div class="video-item group p-4 rounded-2xl bg-white border-2 border-transparent transition-all cursor-move ${isActive ? 'active' : 'hover:border-gray-200'}" data-id="${item.id}">
                         <div class="flex justify-between items-start gap-2 mb-3">
                             <div class="flex-1 cursor-pointer" onclick="playMedia(${idx})">
-                                <h4 class="font-bold text-sm leading-tight text-gray-800">${idx + 1}. ${item.name}</h4>
-                                <span class="text-[10px] ${isActive ? 'text-rose-500' : 'text-green-500'} font-bold flex items-center gap-1 mt-1">
-                                    <span class="w-2 h-2 rounded-full bg-current"></span>
-                                    ${isActive ? 'ĐANG CHỌN' : 'SẴN SÀNG'}
-                                </span>
+                                <h4 class="font-bold text-sm leading-tight text-gray-800 line-clamp-2">${idx + 1}. ${item.name}</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    ${isPlaying ? '<span class="is-playing-icon">●</span>' : ''}
+                                    <span class="text-[10px] ${isActive ? 'text-rose-500' : 'text-green-600'} font-bold tracking-tighter uppercase">
+                                        ${isActive ? (isPlaying ? 'Đang phát' : 'Đang chọn') : 'Sẵn sàng'}
+                                    </span>
+                                </div>
                             </div>
-                            <div class="flex gap-1">
+                            <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                 <button onclick="ghimToSpecific(${idx})" class="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Ghim nhanh">
                                     <i data-lucide="map-pin" class="w-4 h-4"></i>
                                 </button>
-                                
                                 <button onclick="togglePlayPauseFromList(${idx})" class="p-2 ${isActive ? 'bg-amber-100 text-amber-600' : 'bg-blue-50 text-blue-500'} rounded-lg hover:opacity-80 transition-colors">
                                     <i data-lucide="${isPlaying ? 'pause' : 'play'}" class="w-4 h-4 fill-current"></i>
                                 </button>
-
                                 <button onclick="openModal(${idx})" class="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
                                     <i data-lucide="edit-3" class="w-4 h-4"></i>
                                 </button>
@@ -175,7 +227,7 @@
                                 <div class="pause-row flex items-center justify-between bg-gray-50 hover:bg-rose-50 px-3 py-2 rounded-lg cursor-pointer transition-all border-l-2 border-blue-400" onclick="jumpTo(${idx}, ${p.time})">
                                     <div class="text-[11px] font-medium text-gray-600 w-full flex items-center gap-2" >
                                         <i data-lucide="clock" class="w-3 h-3 text-rose-400"></i>
-                                        <strong class="text-rose-500">${p.time}s</strong> — ${p.hint}
+                                        <strong class="text-rose-600">${p.time}s</strong> — ${p.hint}
                                     </div>
                                     <button onclick="deletePointInList(${idx}, ${pIdx})" class="text-gray-300 hover:text-red-500 transition-colors">
                                         <i data-lucide="x-circle" class="w-4 h-4"></i>
@@ -186,7 +238,7 @@
                     </div>
                 `;
             }).join('');
-            lucide.createIcons(); // Quan trọng: Cần gọi lại sau khi render HTML động
+            lucide.createIcons();
         }
 
         async function playMedia(idx) {
@@ -198,47 +250,51 @@
             currentObjectURL = URL.createObjectURL(item.fileBlob);
 
             const container = document.getElementById('previewContainer');
-            container.innerHTML = `<video id="mainPlayer" controls><source src="${currentObjectURL}"></video>`;
+            container.innerHTML = `<video id="mainPlayer" controls class="shadow-2xl"><source src="${currentObjectURL}"></video>`;
             const player = document.getElementById('mainPlayer');
             
             document.getElementById('playingInfo').classList.remove('hidden');
             document.getElementById('currentTitle').innerText = item.name;
             
             player.currentTime = item.startTime;
-            player.play();
+            player.play().catch(e => console.log("Auto-play blocked"));
 
             player.ontimeupdate = () => {
                 const now = Math.floor(player.currentTime);
-                if (now >= item.endTime) { player.pause(); player.currentTime = item.startTime; }
+                if (item.endTime > 0 && now >= item.endTime) { 
+                    player.currentTime = item.startTime; 
+                    player.play();
+                }
                 const point = item.pausePoints.find(p => p.time === now && globalLastPause !== now);
-                if (point) { player.pause(); globalLastPause = now; }
+                if (point) { 
+                    player.pause(); 
+                    globalLastPause = now; 
+                }
             };
 
-            player.onplay = () => { syncToScreen2('play'); renderVideoList(); };
-            player.onpause = () => { syncToScreen2('pause'); renderVideoList(); };
-            player.onseeked = () => syncToScreen2('sync', player.currentTime);
+            player.onended = () => {
+                if (idx + 1 < db.length) playMedia(idx + 1);
+            };
 
-            if (fullscreenWindow && !fullscreenWindow.closed) {
-                fullscreenWindow.postMessage({ action: 'load', src: currentObjectURL, time: item.startTime }, '*');
-            }
+            player.onplay = () => { renderVideoList(); };
+            player.onpause = () => { renderVideoList(); };
             renderVideoList();
         }
 
         function togglePlayPauseFromList(idx) {
             const player = document.getElementById('mainPlayer');
             if (currentIndex === idx && player) {
-                if (player.paused) player.play();
-                else player.pause();
-                renderVideoList();
+                player.paused ? player.play() : player.pause();
             } else {
                 playMedia(idx);
             }
         }
 
         function jumpTo(idx, time) {
+            event.stopPropagation();
             if (currentIndex !== idx) { 
                 playMedia(idx); 
-                setTimeout(() => performJump(time), 600); 
+                setTimeout(() => performJump(time), 800); 
             } else {
                 performJump(time);
             }
@@ -250,40 +306,32 @@
                 p.currentTime = time;
                 globalLastPause = time;
                 p.play();
-                syncToScreen2('jump', time);
             }
         }
 
         function ghimToSpecific(idx) {
+            event.stopPropagation();
             const player = document.getElementById('mainPlayer');
-            if (!player) return alert("Phát video để lấy mốc thời gian!");
+            if (currentIndex !== idx || !player) return alert("Vui lòng phát video này trước!");
 
-            // 1. Lưu trạng thái hiện tại và tạm dừng media
             const wasPlaying = !player.paused;
             player.pause();
 
             const time = Math.floor(player.currentTime);
-            
-            // 2. Hiện thông báo nhập ghi chú (Lúc này media đã dừng)
-            const hint = prompt(`Ghim ${time}s vào clip "${db[idx].name}":`, "Ghi chú...");
+            const hint = prompt(`Thêm ghi chú tại ${time} giây:`, "Điểm dừng mới");
 
-            // 3. Xử lý lưu dữ liệu
             if (hint !== null) {
-                db[idx].pausePoints.push({ time, hint });
+                db[idx].pausePoints.push({ time, hint: hint || "Ghi chú..." });
                 db[idx].pausePoints.sort((a, b) => a.time - b.time);
                 dbAEON.media.update(db[idx].id, { pausePoints: db[idx].pausePoints });
                 renderVideoList();
             }
-
-            // 4. Tiếp tục phát nếu trước đó đang phát
-            if (wasPlaying) {
-                player.play();
-            }
+            if (wasPlaying) player.play();
         }
 
         function deletePointInList(vIdx, pIdx) {
             event.stopPropagation();
-            if (confirm("Xóa điểm này?")) {
+            if (confirm("Xóa điểm dừng này?")) {
                 db[vIdx].pausePoints.splice(pIdx, 1);
                 dbAEON.media.update(db[vIdx].id, { pausePoints: db[vIdx].pausePoints });
                 renderVideoList();
@@ -293,30 +341,37 @@
         async function handleMultiSelect(event) {
             const files = Array.from(event.target.files);
             const btnPick = document.getElementById('btnPickFile');
-            btnPick.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Đang nạp...`;
+            btnPick.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Đang tải ${files.length} file...`;
             lucide.createIcons();
+            
             tempFilesData = [];
             for (let file of files) {
                 tempFilesData.push({ name: file.name.split('.')[0], fileBlob: file });
             }
-            const previewUrl = URL.createObjectURL(tempFilesData[0].fileBlob);
-            setupModalPlayer(previewUrl);
-            document.getElementById('editName').value = tempFilesData[0].name;
+            
+            if (tempFilesData.length > 0) {
+                const previewUrl = URL.createObjectURL(tempFilesData[0].fileBlob);
+                setupModalPlayer(previewUrl);
+                document.getElementById('editName').value = tempFilesData[0].name;
+            }
+            
             btnPick.innerHTML = `<i data-lucide="file-video" class="w-4 h-4"></i> Chọn File Media`;
             lucide.createIcons();
         }
 
         function setupModalPlayer(src) {
             const container = document.getElementById('modalPlayerContainer');
-            container.innerHTML = `<video id="modalPlayer" controls><source src="${src}"></video>`;
+            container.innerHTML = `<video id="modalPlayer" controls class="max-h-full"><source src="${src}"></video>`;
             const p = document.getElementById('modalPlayer');
-            p.onloadedmetadata = () => { if (editingIndex === -1) document.getElementById('editEnd').value = Math.floor(p.duration); };
+            p.onloadedmetadata = () => { 
+                if (editingIndex === -1) document.getElementById('editEnd').value = Math.floor(p.duration); 
+            };
         }
 
         async function saveMedia() {
             const name = document.getElementById('editName').value || "Chưa đặt tên";
             const startTime = parseInt(document.getElementById('editStart').value) || 0;
-            const endTime = parseInt(document.getElementById('editEnd').value) || 9999;
+            const endTime = parseInt(document.getElementById('editEnd').value) || 0;
             const rows = document.querySelectorAll('#pausePointsEditor > div');
             const pausePoints = Array.from(rows).map(r => ({
                 time: parseInt(r.querySelectorAll('input')[0].value),
@@ -326,7 +381,6 @@
             const btnSave = document.getElementById('btnSaveMedia');
             btnSave.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Đang lưu...`;
             btnSave.disabled = true;
-            lucide.createIcons();
 
             if (editingIndex > -1) {
                 const id = db[editingIndex].id;
@@ -335,38 +389,65 @@
                 await dbAEON.media.update(id, updateObj);
             } else {
                 for (let f of tempFilesData) {
-                    await dbAEON.media.add({ name: f.name, fileBlob: f.fileBlob, startTime, endTime, pausePoints: [...pausePoints] });
+                    const count = await dbAEON.media.count();
+                    await dbAEON.media.add({ 
+                        name: f.name, 
+                        fileBlob: f.fileBlob, 
+                        startTime, 
+                        endTime, 
+                        pausePoints: [...pausePoints],
+                        order: count
+                    });
                 }
             }
+            
             await loadDataFromDB();
-            closeModal();
-            btnSave.innerHTML = `<i data-lucide="save" class="w-5 h-5"></i> Lưu`;
+            closeModal(); // Đóng modal và tắt nhạc
+            btnSave.innerHTML = `<i data-lucide="save" class="w-5 h-5"></i> Lưu Lại`;
             btnSave.disabled = false;
         }
 
         function openModal(idx = -1) {
-            editingIndex = idx; tempFilesData = [];
+            // FIX: Tạm dừng trình phát chính khi mở modal
+            const mainPlayer = document.getElementById('mainPlayer');
+            if (mainPlayer) mainPlayer.pause();
+
+            editingIndex = idx; 
+            tempFilesData = [];
             document.getElementById('editModal').classList.remove('hidden');
             document.body.classList.add('modal-open');
             document.getElementById('pausePointsEditor').innerHTML = '';
+            
             if (idx > -1) {
                 const item = db[idx];
                 document.getElementById('editName').value = item.name;
                 document.getElementById('editStart').value = item.startTime;
                 document.getElementById('editEnd').value = item.endTime;
                 item.pausePoints.forEach(p => addPausePointRow(p.time, p.hint));
-                const url = URL.createObjectURL(item.fileBlob);
-                setupModalPlayer(url);
+                setupModalPlayer(URL.createObjectURL(item.fileBlob));
             } else {
                 document.getElementById('editName').value = '';
                 document.getElementById('editStart').value = 0;
                 document.getElementById('editEnd').value = 0;
-                document.getElementById('modalPlayerContainer').innerHTML = '<div class="text-center text-gray-500"><i data-lucide="video-off" class="w-10 h-10 mx-auto mb-2 opacity-20"></i><p class="text-xs">Chưa có file</p></div>';
+                document.getElementById('modalPlayerContainer').innerHTML = '<p class="text-gray-400 text-sm italic">Chọn file để bắt đầu</p>';
             }
             lucide.createIcons();
         }
 
-        function closeModal() { document.getElementById('editModal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
+        function closeModal() { 
+            // FIX: Tìm trình phát trong modal và hủy hoàn toàn
+            const modalPlayer = document.getElementById('modalPlayer');
+            if (modalPlayer) {
+                modalPlayer.pause();
+                modalPlayer.src = "";
+                modalPlayer.load();
+            }
+            // Reset container về trạng thái ban đầu
+            document.getElementById('modalPlayerContainer').innerHTML = '<p class="text-gray-400 text-sm italic">Vui lòng chọn file để xem trước</p>';
+
+            document.getElementById('editModal').classList.add('hidden'); 
+            document.body.classList.remove('modal-open'); 
+        }
 
         function ghimPausePointModal() {
             const p = document.getElementById('modalPlayer');
@@ -378,7 +459,7 @@
             div.className = 'flex gap-2 items-center bg-white p-2 rounded-xl border border-gray-100 shadow-sm mb-2';
             div.innerHTML = `
                 <input type="number" value="${time}" class="w-16 p-1 border rounded text-xs font-bold text-rose-500">
-                <input type="text" value="${hint}" class="flex-1 p-1 border rounded text-xs">
+                <input type="text" value="${hint}" class="flex-1 p-1 border rounded text-xs" placeholder="Ghi chú...">
                 <button onclick="this.parentElement.remove()" class="text-gray-300 hover:text-red-500 transition-colors">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
@@ -387,45 +468,85 @@
             lucide.createIcons();
         }
 
-        function syncToScreen2(action, time = 0) {
-            if (fullscreenWindow && !fullscreenWindow.closed) fullscreenWindow.postMessage({ action, time }, '*');
-        }
-
-        async function exportData() {
+        async function exportDataZip() {
             if (db.length === 0) return alert("Playlist trống!");
-            const exportReady = [];
-            for(let item of db) {
-                const base64 = await new Promise(r => {
-                    const reader = new FileReader();
-                    reader.onload = () => r(reader.result);
-                    reader.readAsDataURL(item.fileBlob);
-                });
-                exportReady.push({...item, base64Data: base64, fileBlob: null});
+            const btn = document.getElementById('btnExport');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> Đang nén...`;
+            lucide.createIcons();
+
+            try {
+                const zip = new JSZip();
+                const metadata = [];
+                for (let item of db) {
+                    const safeName = item.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const fileName = `media_${item.id}_${safeName}.mp4`;
+                    zip.file(fileName, item.fileBlob);
+                    metadata.push({
+                        name: item.name,
+                        startTime: item.startTime,
+                        endTime: item.endTime,
+                        pausePoints: item.pausePoints,
+                        fileName: fileName,
+                        order: item.order
+                    });
+                }
+                zip.file("aeon_config.json", JSON.stringify(metadata));
+                const content = await zip.generateAsync({type: "blob"});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = `PLAYER_Backup_${new Date().toISOString().slice(0,10)}.zip`;
+                a.click();
+            } catch (e) { alert("Lỗi khi nén file: " + e.message); } 
+            finally {
+                btn.innerHTML = originalHTML;
+                lucide.createIcons();
             }
-            const blob = new Blob([JSON.stringify(exportReady)], {type: 'application/json'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'AEON_Backup.json'; a.click();
         }
 
-        async function importData(e) {
-            const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    if(confirm("Xóa danh sách cũ?")) await dbAEON.media.clear();
-                    for(let item of data) {
-                        const res = await fetch(item.base64Data);
-                        const blob = await res.blob();
-                        await dbAEON.media.add({ ...item, fileBlob: blob, base64Data: null });
+        async function importDataZip(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const btn = document.getElementById('btnImport');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> Đang giải nén...`;
+            lucide.createIcons();
+
+            try {
+                const zip = await JSZip.loadAsync(file);
+                const configData = await zip.file("aeon_config.json").async("string");
+                const metadata = JSON.parse(configData);
+
+                if(confirm(`Tìm thấy ${metadata.length} mục. Bạn có muốn ghi đè danh sách hiện tại?`)) {
+                    await dbAEON.media.clear();
+                    for(let item of metadata) {
+                        const videoBlob = await zip.file(item.fileName).async("blob");
+                        await dbAEON.media.add({
+                            name: item.name,
+                            startTime: item.startTime,
+                            endTime: item.endTime,
+                            pausePoints: item.pausePoints,
+                            fileBlob: videoBlob,
+                            order: item.order || 0
+                        });
                     }
-                    await loadDataFromDB(); alert("Thành công!");
-                } catch (err) { alert("Lỗi file!"); }
-            };
-            reader.readAsText(file);
+                    await loadDataFromDB();
+                    alert("Đã nhập dữ liệu thành công!");
+                }
+            } catch (err) { alert("Lỗi khi đọc file ZIP."); } 
+            finally {
+                btn.innerHTML = originalHTML;
+                lucide.createIcons();
+                e.target.value = "";
+            }
         }
 
         async function deleteMedia(idx) { 
-            if(confirm('Xóa vĩnh viễn?')) { await dbAEON.media.delete(db[idx].id); await loadDataFromDB(); } 
+            event.stopPropagation();
+            if(confirm('Xóa vĩnh viễn mục này?')) { 
+                await dbAEON.media.delete(db[idx].id); 
+                await loadDataFromDB(); 
+            } 
         }
 
         loadDataFromDB();
