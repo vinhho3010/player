@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Media Player</title>
+    <title>Media Player Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -32,7 +32,18 @@
             100% { transform: scale(1); opacity: 1; }
         }
         .is-playing-icon { animation: pulse-red 1.5s infinite; color: #f5576c; }
-        .drag-ghost { opacity: 0.5; background: #f1f5f9; }
+        .drag-ghost { opacity: 0.5; background: #f1f5f9; border: 2px dashed #cbd5e1; }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+
+        /* Custom Toggle Style for Dark Theme */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #f5576c;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #f5576c;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-[#1a2a6c] via-[#b21f1f] to-[#fdbb2d] min-h-screen p-2 md:p-5 text-gray-800">
@@ -47,7 +58,7 @@
                 </div>
                 <span id="itemCount" class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500">0 mục</span>
             </h2>
-            
+
             <div class="grid grid-cols-2 gap-2 mb-4">
                 <button id="btnExport" onclick="exportDataZip()" class="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md active:scale-95 text-sm">
                     <i data-lucide="archive" class="w-4 h-4"></i> Xuất ZIP
@@ -63,7 +74,7 @@
                 <span>Thêm Media Mới</span>
             </button>
 
-            <div id="videoList" class="flex-grow overflow-y-auto space-y-3 pr-1"></div>
+            <div id="videoList" class="flex-grow overflow-y-auto space-y-3 pr-1 pb-10"></div>
         </div>
 
         <div class="flex-1 bg-black rounded-3xl shadow-2xl overflow-hidden flex flex-col relative min-h-[400px]">
@@ -74,16 +85,33 @@
                 </div>
             </div>
 
-            <div id="playingInfo" class="hidden px-6 py-4 bg-white/10 text-white text-sm backdrop-blur-md border-t border-white/10">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3 overflow-hidden">
+            <div id="playingInfo" class="hidden px-4 md:px-6 py-4 bg-white/10 text-white text-sm backdrop-blur-md border-t border-white/10">
+                <div class="flex flex-col xl:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 overflow-hidden w-full xl:w-auto">
                         <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0"></div>
-                        <span class="text-gray-400 uppercase tracking-widest text-[10px] font-bold flex-shrink-0">Đang phát</span>
-                        <span id="currentTitle" class="font-bold text-lg truncate"></span>
+                        <span id="currentTitle" class="font-bold text-lg truncate max-w-[200px] md:max-w-md"></span>
                     </div>
-                    <div class="flex items-center gap-4 ml-4">
-                         <div class="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-                            <i data-lucide="repeat" class="w-4 h-4 text-green-400"></i>
+                    
+                    <div class="flex flex-wrap items-center justify-center xl:justify-end gap-4 w-full xl:w-auto">
+                        
+                        <div class="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10" title="Bật/Tắt tính năng tự dừng tại điểm ghim">
+                            <span class="text-xs font-bold text-gray-300">Auto Stop</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="autoPauseToggle" class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#f5576c]"></div>
+                            </label>
+                        </div>
+
+                         <div class="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                            <i data-lucide="gauge" class="w-4 h-4 text-yellow-400"></i>
+                            <select id="speedControl" onchange="changePlaybackSpeed(this.value)" class="bg-transparent border-none text-white text-xs font-bold outline-none cursor-pointer appearance-none text-center min-w-[40px]">
+                                <option value="0.5" class="text-black">0.5x</option>
+                                <option value="0.75" class="text-black">0.75x</option>
+                                <option value="1" class="text-black" selected>1.0x</option>
+                                <option value="1.25" class="text-black">1.25x</option>
+                                <option value="1.5" class="text-black">1.5x</option>
+                                <option value="2" class="text-black">2.0x</option>
+                            </select>
                          </div>
                     </div>
                 </div>
@@ -112,7 +140,10 @@
                         </div>
                         <div>
                             <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Kết thúc (s)</label>
-                            <input type="number" id="editEnd" value="0" class="w-full mt-1 border border-gray-200 rounded-lg p-2 outline-none focus:border-blue-400">
+                            <div class="flex gap-2 items-center mt-1">
+                                <input type="number" id="editEnd" value="0" class="w-full border border-gray-200 rounded-lg p-2 outline-none focus:border-blue-400">
+                                <button onclick="setEndToMax()" class="bg-gray-200 p-2 rounded hover:bg-gray-300 text-xs font-bold" title="Lấy độ dài tối đa">MAX</button>
+                            </div>
                         </div>
                     </div>
                     <button onclick="ghimPausePointModal()" class="w-full bg-[#f5576c] text-white py-2 rounded-lg font-bold shadow-md hover:opacity-90 flex items-center justify-center gap-2 transition-all">
@@ -142,14 +173,16 @@
         </div>
     </div>
 
-    <script>
+<script>
         const dbAEON = new Dexie("AEON_Pro_Storage");
         dbAEON.version(2).stores({ media: "++id, name, order" });
 
         let db = [];
         let currentIndex = -1, editingIndex = -1, tempFilesData = []; 
-        let globalLastPause = -1, currentObjectURL = null;
+        let currentObjectURL = null;
+        let sortableInstance = null;
 
+        // --- SHORTCUT KEYS ---
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             const player = document.getElementById('mainPlayer');
@@ -169,6 +202,7 @@
             }
         });
 
+        // --- DATABASE & RENDER ---
         async function loadDataFromDB() {
             db = await dbAEON.media.orderBy('order').toArray();
             if (db.length > 0 && db[0].order === undefined) {
@@ -196,84 +230,124 @@
                 const isPlaying = isActive && mainPlayer && !mainPlayer.paused;
 
                 return `
-                    <div class="video-item group p-4 rounded-2xl bg-white border-2 border-transparent transition-all cursor-move ${isActive ? 'active' : 'hover:border-gray-200'}" data-id="${item.id}">
-                        <div class="flex justify-between items-start gap-2 mb-3">
-                            <div class="flex-1 cursor-pointer" onclick="playMedia(${idx})">
-                                <h4 class="font-bold text-sm leading-tight text-gray-800 line-clamp-2">${idx + 1}. ${item.name}</h4>
-                                <div class="flex items-center gap-2 mt-1">
-                                    ${isPlaying ? '<span class="is-playing-icon">●</span>' : ''}
-                                    <span class="text-[10px] ${isActive ? 'text-rose-500' : 'text-green-600'} font-bold tracking-tighter uppercase">
-                                        ${isActive ? (isPlaying ? 'Đang phát' : 'Đang chọn') : 'Sẵn sàng'}
-                                    </span>
-                                </div>
+                    <div class="video-item group p-3 rounded-2xl bg-white border-2 border-transparent transition-all ${isActive ? 'active' : 'hover:border-gray-200'}" data-id="${item.id}">
+                        <div class="flex gap-3">
+                            <div class="drag-handle flex items-center justify-center text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-1">
+                                <i data-lucide="grip-vertical" class="w-5 h-5"></i>
                             </div>
-                            <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                                <button onclick="ghimToSpecific(${idx})" class="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Ghim nhanh">
-                                    <i data-lucide="map-pin" class="w-4 h-4"></i>
-                                </button>
-                                <button onclick="togglePlayPauseFromList(${idx})" class="p-2 ${isActive ? 'bg-amber-100 text-amber-600' : 'bg-blue-50 text-blue-500'} rounded-lg hover:opacity-80 transition-colors">
-                                    <i data-lucide="${isPlaying ? 'pause' : 'play'}" class="w-4 h-4 fill-current"></i>
-                                </button>
-                                <button onclick="openModal(${idx})" class="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
-                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
-                                </button>
-                                <button onclick="deleteMedia(${idx})" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors">
-                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="space-y-1 border-t border-gray-50 pt-2">
-                            ${item.pausePoints.map((p, pIdx) => `
-                                <div class="pause-row flex items-center justify-between bg-gray-50 hover:bg-rose-50 px-3 py-2 rounded-lg cursor-pointer transition-all border-l-2 border-blue-400" onclick="jumpTo(${idx}, ${p.time})">
-                                    <div class="text-[11px] font-medium text-gray-600 w-full flex items-center gap-2" >
-                                        <i data-lucide="clock" class="w-3 h-3 text-rose-400"></i>
-                                        <strong class="text-rose-600">${p.time}s</strong> — ${p.hint}
+
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start gap-2 mb-2">
+                                    <div class="flex-1 cursor-pointer" onclick="playMedia(${idx})">
+                                        <h4 class="font-bold text-sm leading-tight text-gray-800 line-clamp-2">${idx + 1}. ${item.name}</h4>
+                                        <div class="flex items-center gap-2 mt-1">
+                                            ${isPlaying ? '<span class="is-playing-icon">●</span>' : ''}
+                                            <span class="text-[10px] ${isActive ? 'text-rose-500' : 'text-green-600'} font-bold tracking-tighter uppercase">
+                                                ${isActive ? (isPlaying ? 'Đang phát' : 'Đang chọn') : 'Sẵn sàng'}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <button onclick="deletePointInList(${idx}, ${pIdx})" class="text-gray-300 hover:text-red-500 transition-colors">
-                                        <i data-lucide="x-circle" class="w-4 h-4"></i>
-                                    </button>
+                                    <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                        <button onclick="ghimToSpecific(${idx})" class="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors" title="Ghim nhanh">
+                                            <i data-lucide="map-pin" class="w-4 h-4"></i>
+                                        </button>
+                                        <button onclick="togglePlayPauseFromList(event, ${idx})" class="p-2 ${isActive ? 'bg-amber-100 text-amber-600' : 'bg-blue-50 text-blue-500'} rounded-lg hover:opacity-80 transition-colors">
+                                            <i data-lucide="${isPlaying ? 'pause' : 'play'}" class="w-4 h-4 fill-current"></i>
+                                        </button>
+                                        <button onclick="openModal(${idx})" class="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
+                                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                        </button>
+                                        <button onclick="deleteMedia(${idx})" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                            `).join('')}
+
+                                <div class="space-y-1 border-t border-gray-50 pt-2 ${item.pausePoints.length === 0 ? 'hidden' : ''}">
+                                    ${item.pausePoints.map((p, pIdx) => `
+                                        <div class="pause-row flex items-center justify-between bg-gray-50 hover:bg-rose-50 px-3 py-1.5 rounded-lg cursor-pointer transition-all border-l-2 border-blue-400" onclick="jumpTo(event, ${p.time}, ${idx})">
+                                            <div class="text-[11px] font-medium text-gray-600 w-full flex items-center gap-2" >
+                                                <i data-lucide="clock" class="w-3 h-3 text-rose-400"></i>
+                                                <strong class="text-rose-600">${p.time}s</strong> — ${p.hint}
+                                            </div>
+                                            <button onclick="deletePointInList(event, ${idx}, ${pIdx})" class="text-gray-300 hover:text-red-500 transition-colors">
+                                                <i data-lucide="x-circle" class="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
+            
             lucide.createIcons();
+            initSortable();
         }
 
+        function initSortable() {
+            const el = document.getElementById('videoList');
+            if(sortableInstance) sortableInstance.destroy();
+            sortableInstance = Sortable.create(el, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'drag-ghost',
+                onEnd: async function(evt) {
+                    const itemDivs = document.querySelectorAll('#videoList .video-item');
+                    const updates = [];
+                    itemDivs.forEach((div, index) => {
+                        const id = parseInt(div.getAttribute('data-id'));
+                        updates.push(dbAEON.media.update(id, { order: index }));
+                    });
+                    await Promise.all(updates);
+                    db = await dbAEON.media.orderBy('order').toArray();
+                    renderVideoList();
+                }
+            });
+        }
+
+        // --- PLAYER LOGIC ---
         async function playMedia(idx) {
+            if (idx >= db.length) return;
+
             const item = db[idx];
             currentIndex = idx;
-            globalLastPause = -1;
 
             if (currentObjectURL) URL.revokeObjectURL(currentObjectURL);
             currentObjectURL = URL.createObjectURL(item.fileBlob);
 
             const container = document.getElementById('previewContainer');
-            container.innerHTML = `<video id="mainPlayer" controls class="shadow-2xl"><source src="${currentObjectURL}"></video>`;
+            container.innerHTML = `<video id="mainPlayer" controls class="shadow-2xl" style="width:100%; height:100%"><source src="${currentObjectURL}"></video>`;
             const player = document.getElementById('mainPlayer');
             
             document.getElementById('playingInfo').classList.remove('hidden');
             document.getElementById('currentTitle').innerText = item.name;
             
+            const currentSpeed = document.getElementById('speedControl').value;
+            player.playbackRate = parseFloat(currentSpeed);
+
             player.currentTime = item.startTime;
             player.play().catch(e => console.log("Auto-play blocked"));
 
             player.ontimeupdate = () => {
                 const now = Math.floor(player.currentTime);
-                if (item.endTime > 0 && now >= item.endTime) { 
-                    player.currentTime = item.startTime; 
-                    player.play();
-                }
-                const point = item.pausePoints.find(p => p.time === now && globalLastPause !== now);
-                if (point) { 
-                    player.pause(); 
-                    globalLastPause = now; 
+                const exactTime = player.currentTime;
+
+                if (item.endTime > 0 && exactTime >= item.endTime) { 
+                    if (currentIndex < db.length - 1) {
+                        playMedia(currentIndex + 1);
+                    } else {
+                        player.pause();
+                    }
+                    return; 
                 }
             };
 
             player.onended = () => {
-                if (idx + 1 < db.length) playMedia(idx + 1);
+                if (currentIndex < db.length - 1) {
+                    playMedia(currentIndex + 1);
+                }
             };
 
             player.onplay = () => { renderVideoList(); };
@@ -281,7 +355,8 @@
             renderVideoList();
         }
 
-        function togglePlayPauseFromList(idx) {
+        function togglePlayPauseFromList(event, idx) {
+            event.stopPropagation();
             const player = document.getElementById('mainPlayer');
             if (currentIndex === idx && player) {
                 player.paused ? player.play() : player.pause();
@@ -290,22 +365,46 @@
             }
         }
 
-        function jumpTo(idx, time) {
-            event.stopPropagation();
-            if (currentIndex !== idx) { 
-                playMedia(idx); 
-                setTimeout(() => performJump(time), 800); 
-            } else {
-                performJump(time);
+        function changePlaybackSpeed(val) {
+            const player = document.getElementById('mainPlayer');
+            if (player) {
+                player.playbackRate = parseFloat(val);
             }
         }
 
-        function performJump(time) {
+        // --- FIX: JUMP TO LOGIC ---
+        function jumpTo(event, time, idx) {
+            event.stopPropagation(); // Ngăn sự kiện click lan ra ngoài
+
+            // Trường hợp 1: Click vào điểm dừng của video KHÁC
+            if (idx !== currentIndex) {
+                playMedia(idx).then(() => {
+                    setTimeout(() => {
+                        applyJumpLogic(time);
+                    }, 500); // Đợi video load xong
+                });
+                return;
+            }
+
+            // Trường hợp 2: Click vào điểm dừng của video ĐANG CHỌN
+            applyJumpLogic(time);
+        }
+
+        function applyJumpLogic(time) {
             const p = document.getElementById('mainPlayer');
+            const isAutoStopEnabled = document.getElementById('autoPauseToggle').checked;
             if (p) {
                 p.currentTime = time;
-                globalLastPause = time;
-                p.play();
+
+                if (isAutoStopEnabled) {
+                    // Nếu BẬT Auto Stop -> Dừng
+                    p.pause();
+                } else {
+                    // Nếu TẮT Auto Stop -> Chờ 1 chút để tua xong rồi phát
+                    setTimeout(() => {
+                        p.play()
+                    }, 100);
+                }
             }
         }
 
@@ -329,8 +428,8 @@
             if (wasPlaying) player.play();
         }
 
-        function deletePointInList(vIdx, pIdx) {
-            event.stopPropagation();
+        function deletePointInList(event, vIdx, pIdx) {
+            event.stopPropagation(); 
             if (confirm("Xóa điểm dừng này?")) {
                 db[vIdx].pausePoints.splice(pIdx, 1);
                 dbAEON.media.update(db[vIdx].id, { pausePoints: db[vIdx].pausePoints });
@@ -338,6 +437,7 @@
             }
         }
 
+        // --- FILE & MODAL ---
         async function handleMultiSelect(event) {
             const files = Array.from(event.target.files);
             const btnPick = document.getElementById('btnPickFile');
@@ -353,6 +453,7 @@
                 const previewUrl = URL.createObjectURL(tempFilesData[0].fileBlob);
                 setupModalPlayer(previewUrl);
                 document.getElementById('editName').value = tempFilesData[0].name;
+                document.getElementById('editStart').value = 0;
             }
             
             btnPick.innerHTML = `<i data-lucide="file-video" class="w-4 h-4"></i> Chọn File Media`;
@@ -361,11 +462,22 @@
 
         function setupModalPlayer(src) {
             const container = document.getElementById('modalPlayerContainer');
-            container.innerHTML = `<video id="modalPlayer" controls class="max-h-full"><source src="${src}"></video>`;
+            container.innerHTML = `<video id="modalPlayer" controls class="max-h-full h-full w-full"><source src="${src}"></video>`;
             const p = document.getElementById('modalPlayer');
+            
             p.onloadedmetadata = () => { 
-                if (editingIndex === -1) document.getElementById('editEnd').value = Math.floor(p.duration); 
+                const duration = Math.floor(p.duration);
+                if (editingIndex === -1 || tempFilesData.length > 0) {
+                     document.getElementById('editEnd').value = duration;
+                }
             };
+        }
+
+        function setEndToMax() {
+            const p = document.getElementById('modalPlayer');
+            if(p && p.duration) {
+                document.getElementById('editEnd').value = Math.floor(p.duration);
+            }
         }
 
         async function saveMedia() {
@@ -385,7 +497,9 @@
             if (editingIndex > -1) {
                 const id = db[editingIndex].id;
                 const updateObj = { name, startTime, endTime, pausePoints };
-                if (tempFilesData.length > 0) updateObj.fileBlob = tempFilesData[0].fileBlob;
+                if (tempFilesData.length > 0) {
+                    updateObj.fileBlob = tempFilesData[0].fileBlob;
+                }
                 await dbAEON.media.update(id, updateObj);
             } else {
                 for (let f of tempFilesData) {
@@ -402,13 +516,12 @@
             }
             
             await loadDataFromDB();
-            closeModal(); // Đóng modal và tắt nhạc
+            closeModal();
             btnSave.innerHTML = `<i data-lucide="save" class="w-5 h-5"></i> Lưu Lại`;
             btnSave.disabled = false;
         }
 
         function openModal(idx = -1) {
-            // FIX: Tạm dừng trình phát chính khi mở modal
             const mainPlayer = document.getElementById('mainPlayer');
             if (mainPlayer) mainPlayer.pause();
 
@@ -435,16 +548,13 @@
         }
 
         function closeModal() { 
-            // FIX: Tìm trình phát trong modal và hủy hoàn toàn
             const modalPlayer = document.getElementById('modalPlayer');
             if (modalPlayer) {
                 modalPlayer.pause();
                 modalPlayer.src = "";
                 modalPlayer.load();
             }
-            // Reset container về trạng thái ban đầu
             document.getElementById('modalPlayerContainer').innerHTML = '<p class="text-gray-400 text-sm italic">Vui lòng chọn file để xem trước</p>';
-
             document.getElementById('editModal').classList.add('hidden'); 
             document.body.classList.remove('modal-open'); 
         }
@@ -495,7 +605,7 @@
                 const content = await zip.generateAsync({type: "blob"});
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(content);
-                a.download = `PLAYER_Backup_${new Date().toISOString().slice(0,10)}.zip`;
+                a.download = `PRO_Player_Backup_${new Date().toISOString().slice(0,10)}.zip`;
                 a.click();
             } catch (e) { alert("Lỗi khi nén file: " + e.message); } 
             finally {
@@ -533,7 +643,7 @@
                     await loadDataFromDB();
                     alert("Đã nhập dữ liệu thành công!");
                 }
-            } catch (err) { alert("Lỗi khi đọc file ZIP."); } 
+            } catch (err) { alert("Lỗi khi đọc file ZIP. File không đúng định dạng."); } 
             finally {
                 btn.innerHTML = originalHTML;
                 lucide.createIcons();
